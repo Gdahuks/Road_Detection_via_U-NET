@@ -2,6 +2,7 @@ import unittest
 from model import *
 import torch
 
+
 class TestModel(unittest.TestCase):
     def test_same_size_0_mod_16(self):
         tensor = torch.randn((3, 1, 160, 160))
@@ -58,6 +59,7 @@ class TestModel(unittest.TestCase):
         preds = model(tensor)
 
         self.assertEqual(preds.shape, tensor.shape)
+
 
 if __name__ == '__main__':
     unittest.main()
