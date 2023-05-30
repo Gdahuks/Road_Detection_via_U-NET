@@ -58,3 +58,6 @@ class TestModel(unittest.TestCase):
         preds = model(tensor)
 
         self.assertEqual(preds.shape, tensor.shape)
+
+if __name__ == '__main__':
+    unittest.main()

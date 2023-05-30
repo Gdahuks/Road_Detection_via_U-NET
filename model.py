@@ -1,121 +1,170 @@
-from typing import Sequence
-
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as tf
 
 
 class DoubleConv(nn.Module):
-    """
-    A double convolution module consisting of two sequential convolutional layers.
+    """Double convolution module."""
 
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        *args: Variable length argument list.
-        **kwargs: Arbitrary keyword arguments.
+    def __init__(self, in_channels: int, out_channels: int):
+        """
+        Initialize the DoubleConv module.
 
-    Attributes:
-        conv (nn.Sequential): Sequential module containing two convolutional layers.
-
-    """
-    def __init__(self,
-                 in_channels: int, out_channels: int,
-                 *args, **kwargs):
-        super(DoubleConv, self).__init__(*args, **kwargs)
+        Args:
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+        """
+        super(DoubleConv, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=False),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, 3, 1, 1, bias=False),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
 
     def forward(self, tensor: torch.Tensor) -> torch.Tensor:
         """
-        Perform a forward pass through the double convolution module.
+        Forward pass of the DoubleConv module.
 
         Args:
             tensor (torch.Tensor): Input tensor.
 
         Returns:
-            torch.Tensor: Output tensor after applying the double convolution.
-
+            torch.Tensor: Output tensor.
         """
         return self.conv(tensor)
 
 
-class UNET(nn.Module):
-    """
-    Implementation of the U-Net architecture.
+class DownBlock(nn.Module):
+    """Encoder block module."""
 
-    Args:
-        in_channels (int): Number of input channels. Default is 3.
-        out_channels (int): Number of output channels. Default is 1.
-        features (Sequence[int]): Sequence of integers specifying the number of features
-            at each level of the U-Net. Default is (64, 128, 256, 512).
-        *args: Variable length argument list.
-        **kwargs: Arbitrary keyword arguments.
+    def __init__(self, in_channels: int, out_channels: int):
+        """
+        Initialize the Encoder module.
 
-    Attributes:
-        ups (nn.ModuleList): Module list containing upsample layers.
-        downs (nn.ModuleList): Module list containing downsample layers.
-        pool (nn.MaxPool2d): Max pooling layer.
-        bottleneck (DoubleConv): Double convolution module at the bottleneck of the U-Net.
-        final (nn.Conv2d): Final convolutional layer.
-
-    """
-    def __init__(self,
-                 in_channels: int = 3, out_channels: int = 1,
-                 features: Sequence[int] = (64, 128, 256, 512),
-                 *args, **kwargs):
-        super(UNET, self).__init__(*args, **kwargs)
-        self.ups = nn.ModuleList()
-        self.downs = nn.ModuleList()
+        Args:
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+        """
+        super(DownBlock, self).__init__()
+        self.conv = DoubleConv(in_channels, out_channels)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        for feature in features:
-            self.downs.append(DoubleConv(in_channels, feature))
-            in_channels = feature
-
-        for feature in reversed(features):
-            self.ups.append(nn.ConvTranspose2d(2 * feature, feature,
-                                               kernel_size=2, stride=2))
-            self.ups.append(DoubleConv(2 * feature, feature))
-
-        self.bottleneck = DoubleConv(features[-1], 2 * features[-1])
-        self.final = nn.Conv2d(features[0], out_channels, kernel_size=1)
-
-    def forward(self, tensor: torch.Tensor) -> torch.Tensor:
+    def forward(self, tensor: torch.Tensor) -> (torch.Tensor, torch.Tensor):
         """
-        Perform a forward pass through the U-Net architecture.
+        Forward pass of the Encoder module.
 
         Args:
             tensor (torch.Tensor): Input tensor.
 
         Returns:
-            torch.Tensor: Output tensor after passing through the U-Net.
+            tuple: Tuple containing encoded tensor and skip connection tensor.
+        """
+        tensor = self.conv(tensor)
+        skip = tensor
+        tensor = self.pool(tensor)
+        return tensor, skip
 
+
+class UpBlock(nn.Module):
+    """Decoder block module."""
+
+    def __init__(self, in_channels: int, out_channels: int):
+        """
+        Initialize the Decoder module.
+
+        Args:
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+        """
+        super(UpBlock, self).__init__()
+        self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+        self.conv = DoubleConv(in_channels, out_channels)
+
+    def forward(self, tensor: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the Decoder module.
+
+        Args:
+            tensor (torch.Tensor): Input tensor.
+            skip (torch.Tensor): Skip connection tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
+        tensor = self.up(tensor)
+        if tensor.shape != skip.shape:
+            tensor = tf.resize(tensor, size=skip.shape[2:], antialias=False)
+        tensor = torch.cat((skip, tensor), dim=1)
+        tensor = self.conv(tensor)
+        return tensor
+
+
+class UNET(nn.Module):
+    """UNET model."""
+
+    def __init__(self, in_channels: int = 3, out_channels: int = 1,
+                 min_feature: int = 64, num_features: int = 4):
+        """
+        Initialize the UNET model.
+
+        Args:
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+            min_feature (int): Minimum number of features.
+            num_features (int): Number of scale levels.
+        """
+        super(UNET, self).__init__()
+
+        features = self._calculate_features(min_feature, num_features)
+
+        self.downs = nn.ModuleList()
+        self.ups = nn.ModuleList()
+        self.bottleneck = DoubleConv(features[-1], 2 * features[-1])
+        self.final = nn.Conv2d(features[0], out_channels, kernel_size=1)
+
+        for feature in features:
+            self.downs.append(DownBlock(in_channels, feature))
+            in_channels = feature
+
+        for feature in reversed(features):
+            self.ups.append(UpBlock(2 * feature, feature))
+
+    @staticmethod
+    def _calculate_features(min_feature: int = 64, num_features: int = 4):
+        """
+        Calculate the number of features at each scale level.
+
+        Args:
+            min_feature (int): Minimum number of features.
+            num_features (int): Number of scale levels.
+
+        Returns:
+            list: List containing the number of features at each scale level.
+        """
+        return [min_feature * (2 ** idx) for idx in range(num_features)]
+
+    def forward(self, tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the UNET model.
+
+        Args:
+            tensor (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
         """
         skip_connections = []
 
         for down in self.downs:
-            tensor = down(tensor)
-            skip_connections.insert(0, tensor)
-            tensor = self.pool(tensor)
+            tensor, skip = down(tensor)
+            skip_connections.insert(0, skip)
 
         tensor = self.bottleneck(tensor)
 
-        for up_id in range(0, len(self.ups), 2):
-            tensor = self.ups[up_id](tensor)
-            skip_connection = skip_connections[up_id // 2]
-
-            # Resize tensor to match skip connection size
-            if tensor.shape != skip_connection.shape:
-                tensor = tf.resize(tensor, size=skip_connection.shape[2:])
-
-            concat_skip = torch.cat((skip_connection, tensor), dim=1)
-            tensor = self.ups[up_id + 1](concat_skip)
+        for up, skip_connection in zip(self.ups, skip_connections):
+            tensor = up(tensor, skip_connection)
 
         return self.final(tensor)
