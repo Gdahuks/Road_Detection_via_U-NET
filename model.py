@@ -133,7 +133,7 @@ class UNET(nn.Module):
             self.ups.append(UpBlock(2 * feature, feature))
 
     @staticmethod
-    def _calculate_features(min_feature: int = 64, num_features: int = 4):
+    def _calculate_features(min_feature: int = 64, num_features: int = 4) -> list:
         """
         Calculate the number of features at each scale level.
 
