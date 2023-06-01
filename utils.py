@@ -1,9 +1,12 @@
-from typing import Callable, Optional, Tuple
+import sys
+import time
+from typing import Callable, Optional
 
 import torch
 import torchvision
-from dataset import RoadDetectionDataset
 from torch.utils.data import DataLoader
+
+from dataset import RoadDetectionDataset
 
 
 def save_checkpoint(state: dict, filename: str = "checkpoint.pth.tar") -> None:
@@ -15,7 +18,10 @@ def save_checkpoint(state: dict, filename: str = "checkpoint.pth.tar") -> None:
         filename (str, optional): The filename to save the checkpoint to. Default is "checkpoint.pth.tar".
     """
     print("=> Saving checkpoint")
+    start = time.perf_counter()
     torch.save(state, filename)
+    end = time.perf_counter()
+    print(f"=> Checkpoint saved ({end-start:0.4f}s)")
 
 
 def load_checkpoint(checkpoint: dict, model: torch.nn.Module) -> None:
@@ -27,7 +33,10 @@ def load_checkpoint(checkpoint: dict, model: torch.nn.Module) -> None:
         model (torch.nn.Module): The model to load the checkpoint into.
     """
     print("=> Loading checkpoint")
+    start = time.perf_counter()
     model.load_state_dict(checkpoint["state_dict"])
+    end = time.perf_counter()
+    print(f"=> Checkpoint loaded ({end-start:0.4f}s)")
 
 
 def get_loaders(
@@ -42,8 +51,7 @@ def get_loaders(
         test_transform: Optional[Callable] = None,
         val_transform: Optional[Callable] = None,
         num_workers: int = 4,
-        pin_memory: bool = True
-) -> (DataLoader, DataLoader, Optional[DataLoader]):
+        pin_memory: bool = True) -> (DataLoader, DataLoader, Optional[DataLoader]):
     """
     Create data loaders for training, testing, and validation datasets.
 
@@ -87,8 +95,7 @@ def get_loaders(
     return train_loader, test_loader, val_loader
 
 
-def check_binary_accuracy(loader: DataLoader, model: torch.nn.Module,
-                          device: str = "mps", print_results: bool = True) -> (float, float):
+def check_binary_accuracy(loader: DataLoader, model: torch.nn.Module, device: str = "mps"):
     """
     Calculates the binary accuracy and dice score for a given loader and model.
 
@@ -96,11 +103,9 @@ def check_binary_accuracy(loader: DataLoader, model: torch.nn.Module,
         loader (DataLoader): The data loader containing the input samples and labels.
         model (torch.nn.Module): The model used for prediction.
         device (str, optional): The device to run the computation on (default is "mps").
-        print_results (bool, optional): Whether to print the results (default is True).
-
-    Returns:
-        Tuple[float, float]: A tuple containing the accuracy and dice score.
     """
+    print("=> Calculating metrics")
+    start = time.perf_counter()
     num_correct = 0
     num_pixels = 0
     dice_score = 0
@@ -119,9 +124,40 @@ def check_binary_accuracy(loader: DataLoader, model: torch.nn.Module,
 
     accuracy = num_correct / num_pixels * 100
     dice_score /= len(loader)
+    end = time.perf_counter()
 
-    if print_results:
-        print(f"Got {num_correct}/{num_pixels} with acc {accuracy:.2f}")
-        print(f"Dice score: {dice_score}")
+    print(f"  Acc: {accuracy:.2f}%")
+    print(f"  Dice score: {dice_score:.4f}")
+    print(f"=> End of metrics calculation ({end-start:0.4f}s)")
 
-    return accuracy, dice_score
+
+def save_predictions_as_imgs(loader: DataLoader, model: torch.nn.Module,
+                             folder: str = "saved_images/", device: str = "mps"):
+    """
+    Saves the predicted and ground truth images as PNG files.
+
+    Args:
+        loader (DataLoader): The data loader containing the input samples and labels.
+        model (torch.nn.Module): The model used for prediction.
+        folder (str, optional): The folder path to save the images (default is "saved_images/").
+        device (str, optional): The device to run the computation on (default is "mps").
+    """
+    print("=> Saving image")
+    start = time.perf_counter()
+    model.eval()
+    for idx, (x, y) in enumerate(loader):
+        x = x.to(device=device)
+        with torch.no_grad():
+            preds = torch.sigmoid(model(x))
+            preds = (preds > 0.5).float()
+
+        y = y.to(device=device)
+
+        images = torch.cat((preds, y.unsqueeze(1)), dim=3)
+        images = torchvision.utils.make_grid(images, nrow=1)
+
+        torchvision.utils.save_image(images, f"{folder}/image_{idx}.png")
+    model.train()
+    sys.stdout.flush()
+    end = time.perf_counter()
+    print(f"=> Image Saved ({end-start:0.4f}s)")
