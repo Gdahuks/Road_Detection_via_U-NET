@@ -4,22 +4,23 @@ import torchvision.transforms.functional as tf
 
 
 class DoubleConv(nn.Module):
-    """Double convolution module."""
-
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_channels: int, out_channels: int,
+                 kernel_size_1: int = 3, kernel_size_2: int = 3):
         """
         Initialize the DoubleConv module.
 
         Args:
             in_channels (int): Number of input channels.
             out_channels (int): Number of output channels.
+            kernel_size_1 (int, Optional): Size of first convolution kernel.
+            kernel_size_2 (int, Optional): Size of second convolution kernel.
         """
         super(DoubleConv, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size_1, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size_2, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
@@ -40,7 +41,8 @@ class DoubleConv(nn.Module):
 class DownBlock(nn.Module):
     """Encoder block module."""
 
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_channels: int, out_channels: int,
+                 kernel_size_1: int = 3, kernel_size_2: int = 3):
         """
         Initialize the Encoder module.
 
@@ -49,7 +51,7 @@ class DownBlock(nn.Module):
             out_channels (int): Number of output channels.
         """
         super(DownBlock, self).__init__()
-        self.conv = DoubleConv(in_channels, out_channels)
+        self.conv = DoubleConv(in_channels, out_channels, kernel_size_1, kernel_size_2)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
     def forward(self, tensor: torch.Tensor) -> (torch.Tensor, torch.Tensor):
@@ -60,7 +62,7 @@ class DownBlock(nn.Module):
             tensor (torch.Tensor): Input tensor.
 
         Returns:
-            tuple: Tuple containing encoded tensor and skip connection tensor.
+            (torch.Tensor, torch.Tensor): Tuple containing encoded tensor and skip connection tensor.
         """
         tensor = self.conv(tensor)
         skip = tensor
@@ -69,9 +71,8 @@ class DownBlock(nn.Module):
 
 
 class UpBlock(nn.Module):
-    """Decoder block module."""
-
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_channels: int, out_channels: int,
+                 kernel_size_1: int = 3, kernel_size_2: int = 3):
         """
         Initialize the Decoder module.
 
@@ -81,7 +82,7 @@ class UpBlock(nn.Module):
         """
         super(UpBlock, self).__init__()
         self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
-        self.conv = DoubleConv(in_channels, out_channels)
+        self.conv = DoubleConv(in_channels, out_channels, kernel_size_1, kernel_size_2)
 
     def forward(self, tensor: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
         """
@@ -103,8 +104,6 @@ class UpBlock(nn.Module):
 
 
 class UNET(nn.Module):
-    """UNET model."""
-
     def __init__(self, in_channels: int = 3, out_channels: int = 1,
                  min_feature: int = 64, num_features: int = 4):
         """
