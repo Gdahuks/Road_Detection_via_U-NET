@@ -12,7 +12,7 @@ from utils import *
 # Hyperparameters and/or constants
 DEVICE = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
 
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-4
 BATCH_SIZE = 8
 NUM_EPOCHS = 15
 NUM_WORKERS = 4

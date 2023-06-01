@@ -100,6 +100,11 @@ Estimated Total Size (MB): 3,331,848.04
 ----------------------------------------------------------------
 ```
 
+## Results
+Predicted and ground truth
+
+![result.png](result.png)
+
 ## Dataset
 
 Save dataset under folder `data`. <br>
