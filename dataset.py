@@ -47,6 +47,7 @@ class RoadDetectionDataset(Dataset):
         mask[mask == 255.0] = 1.0
 
         if self.transform is not None:
-            image, mask = self.transform(image=image, mask=mask)
-
+            augmentations = self.transform(image=image, mask=mask)
+            image = augmentations["image"]
+            mask = augmentations["mask"]
         return image, mask
