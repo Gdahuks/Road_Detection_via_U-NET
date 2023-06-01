@@ -171,4 +171,4 @@ class UNET(nn.Module):
 
 if __name__ == "__main__":
     model = UNET().to('cpu')
-    summary(model, (3, 160, 160), device='cpu')
+    summary(model, (3, 112, 160), device='cpu')
