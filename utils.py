@@ -126,8 +126,8 @@ def check_binary_accuracy(loader: DataLoader, model: torch.nn.Module, device: st
     dice_score /= len(loader)
     end = time.perf_counter()
 
-    print(f"  Acc: {accuracy:.2f}%")
-    print(f"  Dice score: {dice_score:.4f}")
+    print(f"  Acc        : {accuracy:.2f}%")
+    print(f"  Dice score : {dice_score:.4f}")
     print(f"=> End of metrics calculation ({end-start:0.4f}s)")
 
 

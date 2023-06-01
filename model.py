@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as tf
+from torchsummary import summary
 
 
 class DoubleConv(nn.Module):
@@ -167,3 +168,7 @@ class UNET(nn.Module):
             tensor = up(tensor, skip_connection)
 
         return self.final(tensor)
+
+if __name__ == "__main__":
+    model = UNET().to('cpu')
+    summary(model, (3, 160, 160), device='cpu')
